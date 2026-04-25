@@ -111,7 +111,73 @@ var (
 	ErrRecipientADJID           = errors.New("message recipient must be a user JID with no device part")
 	ErrServerReturnedError      = errors.New("server returned error")
 	ErrInvalidInlineBotID       = errors.New("invalid inline bot ID")
+
+	// Sentinel errors for specific server-side ack codes returned in the
+	// `error` attribute of an outgoing message ack stanza. Use errors.Is to
+	// detect a specific code; errors.Is(err, ErrServerReturnedError) still
+	// returns true for any of these for backwards compatibility.
+	//
+	// Critical policy: do NOT retry sends that fail with ErrPrivacyTokenMissing.
+	// Retrying counts as another reach-out to a restricted contact and worsens
+	// the time-lock. Surface the error to the caller and stop.
+	ErrPrivacyTokenMissing = &WAServerError{Code: 463, Text: "privacy_token_missing"}
+	ErrMessageCapped       = &WAServerError{Code: 475, Text: "message_capped"}
+	ErrAddressingStale     = &WAServerError{Code: 479, Text: "smax_invalid"}
+	ErrServerRateLimited   = &WAServerError{Code: 421, Text: "rate_limited"}
 )
+
+// WAServerError is the typed error returned for non-zero `error` attributes on
+// outgoing message ack stanzas. Use errors.As to inspect Code, or errors.Is
+// against the package-level sentinels (ErrPrivacyTokenMissing, etc.).
+type WAServerError struct {
+	Code int
+	Text string
+}
+
+func (e *WAServerError) Error() string {
+	if e.Text == "" {
+		return fmt.Sprintf("server returned error %d", e.Code)
+	}
+	return fmt.Sprintf("server returned error %d (%s)", e.Code, e.Text)
+}
+
+// Is matches the package-level sentinels by Code, and matches
+// ErrServerReturnedError for any *WAServerError so callers using
+// errors.Is(err, ErrServerReturnedError) keep working.
+func (e *WAServerError) Is(target error) bool {
+	if target == ErrServerReturnedError {
+		return true
+	}
+	other, ok := target.(*WAServerError)
+	if !ok {
+		return false
+	}
+	return e.Code == other.Code
+}
+
+// Unwrap lets errors.Is(err, ErrServerReturnedError) traverse through callers
+// that wrapped the WAServerError with fmt.Errorf("...: %w", err).
+func (e *WAServerError) Unwrap() error {
+	return ErrServerReturnedError
+}
+
+// classifyServerError converts a numeric ack error into a typed *WAServerError.
+// Unknown codes return a *WAServerError with Text="" — still satisfies
+// errors.Is(err, ErrServerReturnedError) but no specific sentinel match.
+func classifyServerError(code int) error {
+	switch code {
+	case 421:
+		return ErrServerRateLimited
+	case 463:
+		return ErrPrivacyTokenMissing
+	case 475:
+		return ErrMessageCapped
+	case 479:
+		return ErrAddressingStale
+	default:
+		return &WAServerError{Code: code}
+	}
+}
 
 type DownloadHTTPError struct {
 	*http.Response
