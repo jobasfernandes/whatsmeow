@@ -443,7 +443,12 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waE2E
 	resp.ServerID = types.MessageServerID(ag.OptionalInt("server_id"))
 	resp.Timestamp = ag.UnixTime("t")
 	if errorCode := ag.Int("error"); errorCode != 0 {
-		err = fmt.Errorf("%w %d", ErrServerReturnedError, errorCode)
+		// classifyServerError returns a *WAServerError that satisfies
+		// errors.Is(..., ErrServerReturnedError) and errors.Is against
+		// the specific sentinel for known codes (463/475/479/421).
+		// Callers must NOT retry on ErrPrivacyTokenMissing — retrying
+		// counts as another reach-out and worsens the time-lock.
+		err = classifyServerError(errorCode)
 	}
 	expectedPHash := ag.OptionalString("phash")
 	if len(expectedPHash) > 0 && phash != expectedPHash {
