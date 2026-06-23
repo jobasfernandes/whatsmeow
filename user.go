@@ -221,6 +221,8 @@ func (cli *Client) GetUserInfo(ctx context.Context, jids []types.JID) (map[types
 		{Tag: "picture"},
 		{Tag: "devices", Attrs: waBinary.Attrs{"version": "2"}},
 		{Tag: "lid"},
+	}, UsyncQueryExtras{
+		IncludePrivacyToken: true,
 	})
 	if err != nil {
 		return nil, err
@@ -580,10 +582,10 @@ func (cli *Client) GetProfilePictureInfo(ctx context.Context, jid types.JID, par
 		}
 
 		var pictureContent []waBinary.Node
-		if token, _ := cli.Store.PrivacyTokens.GetPrivacyToken(ctx, jid); token != nil {
+		if token, _ := cli.ensureTCToken(ctx, jid); token != nil {
 			pictureContent = []waBinary.Node{{
 				Tag:     "tctoken",
-				Content: token.Token,
+				Content: token,
 			}}
 		}
 
@@ -844,7 +846,8 @@ func (cli *Client) getFBIDDevices(ctx context.Context, jids []types.JID) ([]type
 }
 
 type UsyncQueryExtras struct {
-	BotListInfo []types.BotListInfo
+	BotListInfo         []types.BotListInfo
+	IncludePrivacyToken bool
 }
 
 func (cli *Client) usync(ctx context.Context, jids []types.JID, mode, context string, query []waBinary.Node, extra ...UsyncQueryExtras) (*waBinary.Node, error) {
@@ -887,6 +890,16 @@ func (cli *Client) usync(ctx context.Context, jids []types.JID, mode, context st
 						Attrs: waBinary.Attrs{"persona_id": personaID},
 					}},
 				}}
+			} else if extras.IncludePrivacyToken {
+				token, err := cli.ensureTCToken(ctx, jid)
+				if err != nil {
+					cli.Log.Warnf("Failed to get privacy token for usync status query to %s: %v", jid, err)
+				} else if len(token) > 0 {
+					userList[i].Content = []waBinary.Node{{
+						Tag:     "tctoken",
+						Content: token,
+					}}
+				}
 			}
 		default:
 			return nil, fmt.Errorf("unknown user server '%s'", jid.Server)
