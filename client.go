@@ -195,6 +195,10 @@ type Client struct {
 
 	phoneLinkingCache *phoneLinkingCache
 
+	passkeyLinkingCache  atomic.Pointer[passkeyLinkingCache]
+	passkeyHandoffKey    atomic.Pointer[passkeyHandoffKey]
+	passkeySkipHandoffUX atomic.Bool
+
 	uniqueID  string
 	idCounter atomic.Uint64
 
