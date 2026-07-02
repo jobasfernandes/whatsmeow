@@ -198,10 +198,6 @@ type Client struct {
 	passkeyHandoffKey    atomic.Pointer[passkeyHandoffKey]
 	passkeySkipHandoffUX atomic.Bool
 
-	passkeyLinkingCache  atomic.Pointer[passkeyLinkingCache]
-	passkeyHandoffKey    atomic.Pointer[passkeyHandoffKey]
-	passkeySkipHandoffUX atomic.Bool
-
 	uniqueID  string
 	idCounter atomic.Uint64
 
